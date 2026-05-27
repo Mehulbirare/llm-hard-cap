@@ -144,11 +144,11 @@ export class BudgetGuard {
       if (this.onExceeded === "throw") throw err;
       // "block" returns silently without recording; caller checks via estimate result
       // Surface via console for visibility.
-      console.warn(`[llm-budget-guard] ${err.message}`);
+      console.warn(`[llm-hard-cap] ${err.message}`);
       return;
     }
     // "warn"
-    console.warn(`[llm-budget-guard] ${err.message}`);
+    console.warn(`[llm-hard-cap] ${err.message}`);
   }
 }
 

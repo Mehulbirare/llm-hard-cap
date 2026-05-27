@@ -3,7 +3,7 @@
  * Run: `ANTHROPIC_API_KEY=... npx tsx examples/anthropic.ts`
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { BudgetGuard } from "llm-budget-guard";
+import { BudgetGuard } from "llm-hard-cap";
 
 const client = new Anthropic();
 const guard = new BudgetGuard({ limits: { daily: 10 } });

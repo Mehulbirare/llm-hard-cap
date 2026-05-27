@@ -1,7 +1,7 @@
 {
-  "name": "llm-budget-guard",
+  "name": "llm-hard-cap",
   "version": "0.1.0",
-  "description": "Hard spend limits and budget enforcement for OpenAI, Anthropic Claude, Google Gemini, and any LLM API. Track token costs, set daily/monthly USD caps, and stop runaway AI bills before they happen.",
+  "description": "Hard spend caps for OpenAI, Anthropic Claude, Google Gemini, and any LLM API. Real-time token cost tracking and daily / monthly / per-user USD limits that stop runaway AI bills before they happen.",
   "keywords": [
     "llm",
     "openai",
@@ -57,11 +57,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mehulbirare/llm-budget-guard.git"
+    "url": "git+https://github.com/Mehulbirare/llm-hard-cap.git"
   },
-  "homepage": "https://github.com/Mehulbirare/llm-budget-guard#readme",
+  "homepage": "https://github.com/Mehulbirare/llm-hard-cap#readme",
   "bugs": {
-    "url": "https://github.com/Mehulbirare/llm-budget-guard/issues"
+    "url": "https://github.com/Mehulbirare/llm-hard-cap/issues"
   },
   "license": "MIT",
   "author": "",

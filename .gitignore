@@ -5,6 +5,6 @@ dist/
 .env
 .env.local
 coverage/
-.budget-guard.json
+.llm-hard-cap.json
 .vscode/
 .idea/

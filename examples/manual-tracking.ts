@@ -2,7 +2,7 @@
  * Example: using `check` after you already have token counts
  * (e.g. from a custom client, Bedrock, Ollama, etc).
  */
-import { BudgetGuard } from "llm-budget-guard";
+import { BudgetGuard } from "llm-hard-cap";
 
 const guard = new BudgetGuard({
   limits: { daily: 1 },

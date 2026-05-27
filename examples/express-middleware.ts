@@ -4,7 +4,7 @@
  */
 import express from "express";
 import OpenAI from "openai";
-import { BudgetGuard, BudgetExceededError } from "llm-budget-guard";
+import { BudgetGuard, BudgetExceededError } from "llm-hard-cap";
 
 const app = express();
 app.use(express.json());

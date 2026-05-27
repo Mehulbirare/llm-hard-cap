@@ -3,13 +3,13 @@
  * Run: `OPENAI_API_KEY=sk-... npx tsx examples/openai.ts`
  */
 import OpenAI from "openai";
-import { BudgetGuard, FileStorage } from "llm-budget-guard";
+import { BudgetGuard, FileStorage } from "llm-hard-cap";
 
 const openai = new OpenAI();
 
 const guard = new BudgetGuard({
   limits: { daily: 5, monthly: 50, perRequest: 0.25 },
-  storage: new FileStorage("./.budget-guard.json"),
+  storage: new FileStorage("./.llm-hard-cap.json"),
   onSpend: (e) => console.log(`spent $${e.costUsd.toFixed(4)} on ${e.model}`),
 });
 

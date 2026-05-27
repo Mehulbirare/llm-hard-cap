@@ -20,7 +20,7 @@ Honest expectations: 1500 first-week downloads is **above average**. Most new np
 You need 4 artifacts:
 
 1. **Twitter/X thread** (5–7 tweets). Hook: "I built a thing that would have saved $34k for the Cloudflare team last month."
-2. **HN post** — title only. The title is the entire post; HN strips marketing. Best titles for tools: `Show HN: llm-budget-guard – Hard spend caps for OpenAI/Claude/Gemini in 3 KB`
+2. **HN post** — title only. The title is the entire post; HN strips marketing. Best titles for tools: `Show HN: llm-hard-cap – Hard spend caps for OpenAI/Claude/Gemini in 3 KB`
 3. **Reddit post** for r/node, r/typescript, r/LocalLLaMA, r/SaaS, r/javascript. r/javascript is moderated tightly — read their rules; "Showoff Saturday" is your safest slot.
 4. **Dev.to article** — long form, includes the same code as the README plus a "why I built this" narrative. Cross-post to Hashnode + Medium.
 
@@ -32,7 +32,7 @@ Why Tue/Wed: HN traffic peaks midweek. Avoid Mondays (catch-up email) and Friday
 
 1. 9:00 — Twitter/X thread goes live. Pin it.
 2. 9:05 — Submit to HN. Title only. Don't comment immediately.
-3. 9:15 — r/node post. Title: "I built llm-budget-guard: hard $ caps on OpenAI/Claude calls"
+3. 9:15 — r/node post. Title: "I built llm-hard-cap: hard $ caps on OpenAI/Claude calls"
 4. 9:30 — Dev.to article published. Add tags: `ai`, `openai`, `typescript`, `node`, `webdev`.
 5. 9:45 — Post in 2–3 Discord/Slack communities where you're already a member (TypeScript, AI Engineer, etc.). Never spam communities you don't belong to.
 6. 10:00 — Reply to the first comments on every channel. Engagement in the first hour is what HN/Reddit rank on.
@@ -46,7 +46,7 @@ Why Tue/Wed: HN traffic peaks midweek. Avoid Mondays (catch-up email) and Friday
 
 ## Days 3–7
 
-- Submit a PR to one popular LLM-adjacent repo adding `llm-budget-guard` to their README's "ecosystem" section.
+- Submit a PR to one popular LLM-adjacent repo adding `llm-hard-cap` to their README's "ecosystem" section.
 - Write a second blog post: case-study format. "We capped a customer's OpenAI bill at $10/day. Here's the 8 lines of code."
 - Respond to every GitHub issue within 6 hours. Fast response = social proof.
 

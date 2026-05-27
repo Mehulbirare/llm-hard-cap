@@ -1,19 +1,19 @@
-# llm-budget-guard
+# llm-hard-cap
 
 > **Hard spend limits for OpenAI, Anthropic Claude, Google Gemini, and any LLM API.**
 > Track token costs in real time, enforce daily / monthly / per-user USD caps, and stop runaway AI bills before they happen.
 
-[![npm](https://img.shields.io/npm/v/llm-budget-guard.svg)](https://www.npmjs.com/package/llm-budget-guard)
-[![downloads](https://img.shields.io/npm/dm/llm-budget-guard.svg)](https://www.npmjs.com/package/llm-budget-guard)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/llm-budget-guard)](https://bundlephobia.com/package/llm-budget-guard)
-[![types](https://img.shields.io/npm/types/llm-budget-guard.svg)](#)
-[![license](https://img.shields.io/npm/l/llm-budget-guard.svg)](LICENSE)
+[![npm](https://img.shields.io/npm/v/llm-hard-cap.svg)](https://www.npmjs.com/package/llm-hard-cap)
+[![downloads](https://img.shields.io/npm/dm/llm-hard-cap.svg)](https://www.npmjs.com/package/llm-hard-cap)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/llm-hard-cap)](https://bundlephobia.com/package/llm-hard-cap)
+[![types](https://img.shields.io/npm/types/llm-hard-cap.svg)](#)
+[![license](https://img.shields.io/npm/l/llm-hard-cap.svg)](LICENSE)
 
 ```bash
-npm install llm-budget-guard
+npm install llm-hard-cap
 ```
 
-`llm-budget-guard` is a zero-dependency TypeScript library that puts a hard ceiling on what your application can spend on LLM APIs. It supports **OpenAI** (GPT-4o, GPT-4-turbo, o1, o3-mini), **Anthropic Claude** (Opus 4.7, Sonnet 4.6, Haiku 4.5), **Google Gemini** (1.5/2.0/2.5), **Mistral**, **DeepSeek**, and any custom model you add.
+`llm-hard-cap` is a zero-dependency TypeScript library that puts a hard ceiling on what your application can spend on LLM APIs. It supports **OpenAI** (GPT-4o, GPT-4-turbo, o1, o3-mini), **Anthropic Claude** (Opus 4.7, Sonnet 4.6, Haiku 4.5), **Google Gemini** (1.5/2.0/2.5), **Mistral**, **DeepSeek**, and any custom model you add.
 
 If you've ever woken up to a $30,000 OpenAI bill from a runaway loop, or shipped an AI feature without per-user limits and learned the hard way that one user can drain your monthly quota in an hour — this is for you.
 
@@ -23,7 +23,7 @@ If you've ever woken up to a $30,000 OpenAI bill from a runaway loop, or shipped
 
 LLM provider dashboards show you what you spent *yesterday*. Rate limits stop you at 10,000 RPM, not at $500. So when a bug, retry loop, or one heavy user starts burning tokens, you find out from the bill.
 
-`llm-budget-guard` enforces spend at the **call site**, before the request goes out:
+`llm-hard-cap` enforces spend at the **call site**, before the request goes out:
 
 - **Hard caps in USD**, not RPM. `daily: 10` means "$10/day, full stop."
 - **Per-user / per-route scoping.** Free users get $0.10/day; paid users get $5; an experimental route gets $1.
@@ -37,7 +37,7 @@ LLM provider dashboards show you what you spent *yesterday*. Rate limits stop yo
 
 ```ts
 import OpenAI from "openai";
-import { BudgetGuard } from "llm-budget-guard";
+import { BudgetGuard } from "llm-hard-cap";
 
 const openai = new OpenAI();
 const guard = new BudgetGuard({
@@ -151,7 +151,7 @@ Limits are checked in this order: `perRequest`, `daily`, `monthly`, `total`. The
 ## Handling rejected calls
 
 ```ts
-import { BudgetExceededError } from "llm-budget-guard";
+import { BudgetExceededError } from "llm-hard-cap";
 
 try {
   await guard.wrap({ model: "gpt-4o", estimatedInputTokens: 1000 }, call);
@@ -175,18 +175,18 @@ try {
 The default storage is in-memory — fine for short-lived scripts and tests. For real apps:
 
 ```ts
-import { BudgetGuard, FileStorage } from "llm-budget-guard";
+import { BudgetGuard, FileStorage } from "llm-hard-cap";
 
 const guard = new BudgetGuard({
   limits: { daily: 10 },
-  storage: new FileStorage("./.budget-guard.json"),
+  storage: new FileStorage("./.llm-hard-cap.json"),
 });
 ```
 
 For distributed / multi-process setups, implement the `Storage` interface against Redis, Postgres, or your existing database:
 
 ```ts
-import type { Storage, SpendEvent, UsageSummary } from "llm-budget-guard";
+import type { Storage, SpendEvent, UsageSummary } from "llm-hard-cap";
 
 class RedisStorage implements Storage {
   async record(event: SpendEvent) { /* INCRBYFLOAT keys */ }
@@ -226,7 +226,7 @@ new BudgetGuard({
 
 ### How is this different from OpenAI's usage limits in the dashboard?
 
-OpenAI's caps are organization-wide, settle a day later, and don't tell you *who* spent what. `llm-budget-guard` enforces in real time, per scope (user, route, environment), and rejects calls before they leave your server.
+OpenAI's caps are organization-wide, settle a day later, and don't tell you *who* spent what. `llm-hard-cap` enforces in real time, per scope (user, route, environment), and rejects calls before they leave your server.
 
 ### Does this work with streaming responses?
 
@@ -286,7 +286,7 @@ See [`examples/`](./examples) for runnable scripts:
 
 ## Comparison
 
-| | `llm-budget-guard` | Provider dashboards | API gateway proxies |
+| | `llm-hard-cap` | Provider dashboards | API gateway proxies |
 |--|--|--|--|
 | Real-time enforcement | ✅ | ❌ (delayed) | ✅ |
 | Per-user / per-scope | ✅ | ❌ | partial |
