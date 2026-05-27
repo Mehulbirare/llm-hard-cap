@@ -1,0 +1,77 @@
+{
+  "name": "llm-budget-guard",
+  "version": "0.1.0",
+  "description": "Hard spend limits and budget enforcement for OpenAI, Anthropic Claude, Google Gemini, and any LLM API. Track token costs, set daily/monthly USD caps, and stop runaway AI bills before they happen.",
+  "keywords": [
+    "llm",
+    "openai",
+    "anthropic",
+    "claude",
+    "gemini",
+    "gpt-4",
+    "gpt-4o",
+    "ai-cost",
+    "llm-cost",
+    "openai-cost",
+    "token-counter",
+    "budget",
+    "spend-limit",
+    "rate-limit",
+    "ai-budget",
+    "llm-budget",
+    "cost-tracking",
+    "ai-spend",
+    "openai-pricing",
+    "claude-pricing",
+    "llm-middleware",
+    "ai-guardrails",
+    "token-pricing",
+    "ai-cost-control",
+    "llm-observability"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mehulbirare/llm-budget-guard.git"
+  },
+  "homepage": "https://github.com/Mehulbirare/llm-budget-guard#readme",
+  "bugs": {
+    "url": "https://github.com/Mehulbirare/llm-budget-guard/issues"
+  },
+  "license": "MIT",
+  "author": "",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,9 @@
+src/
+tests/
+examples/
+.github/
+tsconfig.json
+vitest.config.ts
+*.test.ts
+.gitignore
+LAUNCH.md
