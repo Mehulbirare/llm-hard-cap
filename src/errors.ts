@@ -30,6 +30,20 @@ export class BudgetExceededError extends Error {
   }
 }
 
+export class UnknownModelError extends Error {
+  readonly code = "UNKNOWN_MODEL";
+  readonly model: string;
+
+  constructor(model: string) {
+    super(
+      `No pricing found for model "${model}". Add it via the \`pricing\` option, ` +
+        `or set \`onUnknownModel: "zero"\` to treat unknown models as free.`,
+    );
+    this.name = "UnknownModelError";
+    this.model = model;
+  }
+}
+
 export function pickViolation(
   summary: UsageSummary,
   addCost: number,

@@ -1,5 +1,5 @@
-import { BudgetExceededError, pickViolation } from "./errors.js";
-import { calculateCost } from "./pricing.js";
+import { BudgetExceededError, UnknownModelError, pickViolation } from "./errors.js";
+import { calculateCost, hasPricing } from "./pricing.js";
 import { MemoryStorage } from "./storage.js";
 import type {
   BudgetGuardOptions,
@@ -20,6 +20,7 @@ export class BudgetGuard {
   private readonly onExceeded: OnExceeded;
   private readonly storage: Storage;
   private readonly pricing: Record<string, ModelPricing> | undefined;
+  private readonly onUnknownModel: "throw" | "zero";
   private readonly onSpend: ((event: SpendEvent) => void) | undefined;
 
   constructor(options: BudgetGuardOptions) {
@@ -27,6 +28,7 @@ export class BudgetGuard {
     this.onExceeded = options.onExceeded ?? "throw";
     this.storage = options.storage ?? new MemoryStorage();
     this.pricing = options.pricing;
+    this.onUnknownModel = options.onUnknownModel ?? "throw";
     this.onSpend = options.onSpend;
   }
 
@@ -34,20 +36,25 @@ export class BudgetGuard {
    * Check that a known-cost call is within budget, then record it.
    * Use this AFTER an LLM call returns and you have real token counts.
    */
-  async check(args: CheckArgs): Promise<{ costUsd: number; summary: UsageSummary }> {
+  async check(
+    args: CheckArgs,
+  ): Promise<{ costUsd: number; summary: UsageSummary; recorded: boolean }> {
     const scope = args.scope ?? DEFAULT_SCOPE;
+    this.assertKnownModel(args.model);
     const inputTokens = args.inputTokens;
     const outputTokens = args.outputTokens ?? 0;
     const cost = calculateCost(args.model, inputTokens, outputTokens, this.pricing);
     const limits = { ...this.defaultLimits, ...(args.limits ?? {}) };
 
     const before = await this.storage.summary(scope);
-    const violation = pickViolation(before, cost, limits);
-    if (violation) {
-      this.handleViolation(violation, scope);
-      // If we got here with "warn" or "block", do not record.
-      if (this.onExceeded !== "throw") {
-        return { costUsd: cost, summary: before };
+    const error = this.evaluate(before, cost, limits, scope);
+    if (error) {
+      // "throw" stops here; "block" refuses without recording; "warn"
+      // logs but lets the spend through AND records it so totals stay accurate.
+      if (this.onExceeded === "throw") throw error;
+      console.warn(`[llm-hard-cap] ${error.message}`);
+      if (this.onExceeded === "block") {
+        return { costUsd: cost, summary: before, recorded: false };
       }
     }
 
@@ -62,7 +69,7 @@ export class BudgetGuard {
     await this.storage.record(event);
     this.onSpend?.(event);
     const after = await this.storage.summary(scope);
-    return { costUsd: cost, summary: after };
+    return { costUsd: cost, summary: after, recorded: true };
   }
 
   /**
@@ -71,19 +78,11 @@ export class BudgetGuard {
    * Returns the projected cost if allowed; throws (or returns)
    * a BudgetExceededError per `onExceeded` policy.
    */
-  async estimate(args: EstimateArgs): Promise<{ projectedUsd: number; summary: UsageSummary }> {
-    const scope = args.scope ?? DEFAULT_SCOPE;
-    const cost = calculateCost(
-      args.model,
-      args.estimatedInputTokens,
-      args.estimatedOutputTokens ?? 0,
-      this.pricing,
-    );
-    const limits = { ...this.defaultLimits, ...(args.limits ?? {}) };
-    const summary = await this.storage.summary(scope);
-    const violation = pickViolation(summary, cost, limits);
-    if (violation) this.handleViolation(violation, scope);
-    return { projectedUsd: cost, summary };
+  async estimate(
+    args: EstimateArgs,
+  ): Promise<{ projectedUsd: number; summary: UsageSummary; allowed: boolean }> {
+    const { projectedUsd, summary, allowed } = await this.preCheck(args);
+    return { projectedUsd, summary, allowed };
   }
 
   /**
@@ -99,7 +98,12 @@ export class BudgetGuard {
     call: () => Promise<T>,
     extract?: (result: T) => { inputTokens: number; outputTokens: number },
   ): Promise<T> {
-    await this.estimate(args);
+    const { allowed, error } = await this.preCheck(args);
+    if (!allowed) {
+      // "block" mode: refuse the call. `wrap` has no value to return
+      // without calling, so it surfaces the violation by throwing.
+      throw error ?? new Error("[llm-hard-cap] call blocked by budget guard");
+    }
     const result = await call();
     const usage = extract ? extract(result) : defaultExtract(result);
     if (usage) {
@@ -129,26 +133,61 @@ export class BudgetGuard {
     return new ScopedGuard(this, scope, limits);
   }
 
-  private handleViolation(
-    v: { window: "perRequest" | "day" | "month" | "total"; limit: number; current: number; projected: number },
+  /** Throw if the model has no pricing and policy is "throw". */
+  private assertKnownModel(model: string): void {
+    if (this.onUnknownModel === "zero") return;
+    if (!hasPricing(model, this.pricing)) throw new UnknownModelError(model);
+  }
+
+  /** Build a BudgetExceededError for the first violated limit, or null. */
+  private evaluate(
+    summary: UsageSummary,
+    cost: number,
+    limits: BudgetLimits,
     scope: string,
-  ): void {
-    const err = new BudgetExceededError({
+  ): BudgetExceededError | null {
+    const v = pickViolation(summary, cost, limits);
+    if (!v) return null;
+    return new BudgetExceededError({
       window: v.window,
       limitUsd: v.limit,
       currentUsd: v.current,
       projectedUsd: v.projected,
       scope,
     });
-    if (this.onExceeded === "throw" || this.onExceeded === "block") {
-      if (this.onExceeded === "throw") throw err;
-      // "block" returns silently without recording; caller checks via estimate result
-      // Surface via console for visibility.
-      console.warn(`[llm-hard-cap] ${err.message}`);
-      return;
+  }
+
+  /**
+   * Shared pre-flight logic for `estimate` and `wrap`. Applies the
+   * `onExceeded` policy: "throw" throws, "block" returns allowed=false,
+   * "warn" logs and returns allowed=true.
+   */
+  private async preCheck(
+    args: EstimateArgs,
+  ): Promise<{
+    projectedUsd: number;
+    summary: UsageSummary;
+    allowed: boolean;
+    error: BudgetExceededError | null;
+  }> {
+    const scope = args.scope ?? DEFAULT_SCOPE;
+    this.assertKnownModel(args.model);
+    const cost = calculateCost(
+      args.model,
+      args.estimatedInputTokens,
+      args.estimatedOutputTokens ?? 0,
+      this.pricing,
+    );
+    const limits = { ...this.defaultLimits, ...(args.limits ?? {}) };
+    const summary = await this.storage.summary(scope);
+    const error = this.evaluate(summary, cost, limits, scope);
+    let allowed = true;
+    if (error) {
+      if (this.onExceeded === "throw") throw error;
+      console.warn(`[llm-hard-cap] ${error.message}`);
+      if (this.onExceeded === "block") allowed = false;
     }
-    // "warn"
-    console.warn(`[llm-hard-cap] ${err.message}`);
+    return { projectedUsd: cost, summary, allowed, error };
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   BudgetGuard,
   BudgetExceededError,
+  UnknownModelError,
   MemoryStorage,
   calculateCost,
   getPricing,
@@ -75,6 +76,43 @@ describe("BudgetGuard.check", () => {
     const r = await guard.check({ model: "gpt-4o-mini", inputTokens: 1_000_000, outputTokens: 0 });
     expect(r.costUsd).toBeCloseTo(0.15, 6);
   });
+
+  it("warn mode keeps recording spend after the cap is exceeded", async () => {
+    const guard = new BudgetGuard({ limits: { daily: 1 }, onExceeded: "warn" });
+    // $0.30 each (gpt-4o, 120k input). 5 calls = $1.50, crossing the $1 cap.
+    for (let i = 0; i < 5; i++) {
+      const r = await guard.check({ model: "gpt-4o", inputTokens: 120_000, outputTokens: 0 });
+      expect(r.recorded).toBe(true);
+    }
+    const u = await guard.usage();
+    expect(u.day).toBeCloseTo(1.5, 6);
+    expect(u.requests).toBe(5);
+  });
+
+  it("block mode refuses without recording and reports recorded=false", async () => {
+    const guard = new BudgetGuard({ limits: { daily: 1 }, onExceeded: "block" });
+    const r = await guard.check({ model: "gpt-4o", inputTokens: 1_000_000, outputTokens: 0 });
+    expect(r.recorded).toBe(false);
+    const u = await guard.usage();
+    expect(u.day).toBe(0);
+    expect(u.requests).toBe(0);
+  });
+});
+
+describe("unknown models", () => {
+  it("throws UnknownModelError by default so a typo can't disable the guard", async () => {
+    const guard = new BudgetGuard({ limits: { daily: 1 } });
+    await expect(
+      guard.check({ model: "gtp-4o-typo", inputTokens: 1_000_000, outputTokens: 0 }),
+    ).rejects.toBeInstanceOf(UnknownModelError);
+  });
+
+  it('treats unknown models as free when onUnknownModel is "zero"', async () => {
+    const guard = new BudgetGuard({ limits: { daily: 1 }, onUnknownModel: "zero" });
+    const r = await guard.check({ model: "gtp-4o-typo", inputTokens: 1_000_000, outputTokens: 0 });
+    expect(r.costUsd).toBe(0);
+    expect(r.recorded).toBe(true);
+  });
 });
 
 describe("BudgetGuard.estimate", () => {
@@ -138,6 +176,23 @@ describe("BudgetGuard.wrap", () => {
       ),
     ).rejects.toBeInstanceOf(BudgetExceededError);
     expect(called).toBe(false);
+  });
+
+  it("block mode prevents the wrapped call from running", async () => {
+    const guard = new BudgetGuard({ limits: { daily: 0.01 }, onExceeded: "block" });
+    let called = false;
+    const fake = async () => {
+      called = true;
+      return { usage: { prompt_tokens: 1, completion_tokens: 1 } };
+    };
+    await expect(
+      guard.wrap(
+        { model: "gpt-4o", estimatedInputTokens: 1_000_000, estimatedOutputTokens: 0 },
+        fake,
+      ),
+    ).rejects.toBeInstanceOf(BudgetExceededError);
+    expect(called).toBe(false);
+    expect((await guard.usage()).requests).toBe(0);
   });
 });
 

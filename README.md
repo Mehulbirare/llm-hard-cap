@@ -146,6 +146,20 @@ new BudgetGuard({
 
 Limits are checked in this order: `perRequest`, `daily`, `monthly`, `total`. The first violation throws `BudgetExceededError`, which exposes `.window`, `.limitUsd`, `.currentUsd`, `.projectedUsd`, and `.scope`.
 
+### What `onExceeded` does when a limit is hit
+
+| Mode      | `check()`                                              | `estimate()`                  | `wrap()`                          |
+|-----------|--------------------------------------------------------|-------------------------------|-----------------------------------|
+| `"throw"` | throws `BudgetExceededError`                            | throws                        | throws (call never runs)          |
+| `"block"` | returns `{ recorded: false }`, spend **not** recorded  | returns `{ allowed: false }`  | throws (call never runs)          |
+| `"warn"`  | logs, **still records** the spend (`recorded: true`)   | logs, returns `allowed: true` | logs, runs the call, records it   |
+
+`check()` resolves to `{ costUsd, summary, recorded }` and `estimate()` to `{ projectedUsd, summary, allowed }`. In `"block"` mode, inspect `allowed`/`recorded` to decide what to do; `wrap()` can't return a value without making the call, so it throws instead.
+
+### Unknown models
+
+By default an unpriced model name (e.g. a typo) throws `UnknownModelError` so a mistake can't silently disable the guard. Add the model via `pricing`, or pass `onUnknownModel: "zero"` to treat unknown models as free.
+
 ---
 
 ## Handling rejected calls
@@ -260,6 +274,7 @@ The default `MemoryStorage` is per-process. Use `FileStorage` for single-host se
 | `onExceeded`   | `"throw" \| "warn" \| "block"`    | `"throw"`      |
 | `storage`      | `Storage`                         | `MemoryStorage`|
 | `pricing`      | `Record<string, ModelPricing>`    | —              |
+| `onUnknownModel` | `"throw" \| "zero"`             | `"throw"`      |
 | `onSpend`      | `(event: SpendEvent) => void`     | —              |
 
 ### Methods

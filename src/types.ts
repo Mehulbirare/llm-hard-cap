@@ -27,6 +27,12 @@ export interface BudgetGuardOptions {
   storage?: Storage;
   /** Override or extend the built-in pricing table. */
   pricing?: Record<string, ModelPricing>;
+  /**
+   * What to do when a model has no known pricing. `"throw"` (default)
+   * fails safe so a typo can't silently disable the budget guard.
+   * `"zero"` treats unknown models as free (legacy behavior).
+   */
+  onUnknownModel?: "throw" | "zero";
   /** Called whenever a request is recorded. */
   onSpend?: (event: SpendEvent) => void;
 }
