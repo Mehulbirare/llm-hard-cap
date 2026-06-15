@@ -22,6 +22,8 @@ export class BudgetGuard {
   private readonly pricing: Record<string, ModelPricing> | undefined;
   private readonly onUnknownModel: "throw" | "zero";
   private readonly onSpend: ((event: SpendEvent) => void) | undefined;
+  /** Per-scope promise chain used to serialise check/record operations (Fix: TOCTOU race). */
+  private readonly _pending = new Map<string, Promise<void>>();
 
   constructor(options: BudgetGuardOptions) {
     this.defaultLimits = options.limits;
@@ -46,30 +48,33 @@ export class BudgetGuard {
     const cost = calculateCost(args.model, inputTokens, outputTokens, this.pricing);
     const limits = { ...this.defaultLimits, ...(args.limits ?? {}) };
 
-    const before = await this.storage.summary(scope);
-    const error = this.evaluate(before, cost, limits, scope);
-    if (error) {
-      // "throw" stops here; "block" refuses without recording; "warn"
-      // logs but lets the spend through AND records it so totals stay accurate.
-      if (this.onExceeded === "throw") throw error;
-      console.warn(`[llm-hard-cap] ${error.message}`);
-      if (this.onExceeded === "block") {
-        return { costUsd: cost, summary: before, recorded: false };
+    // Serialise per-scope to prevent TOCTOU races on concurrent requests.
+    return this.withScopeLock(scope, async () => {
+      const before = await this.storage.summary(scope);
+      const error = this.evaluate(before, cost, limits, scope);
+      if (error) {
+        // "throw" stops here; "block" refuses without recording; "warn"
+        // logs but lets the spend through AND records it so totals stay accurate.
+        if (this.onExceeded === "throw") throw error;
+        console.warn(`[llm-hard-cap] ${error.message}`);
+        if (this.onExceeded === "block") {
+          return { costUsd: cost, summary: before, recorded: false };
+        }
       }
-    }
 
-    const event: SpendEvent = {
-      model: args.model,
-      inputTokens,
-      outputTokens,
-      costUsd: cost,
-      scope,
-      timestamp: Date.now(),
-    };
-    await this.storage.record(event);
-    this.onSpend?.(event);
-    const after = await this.storage.summary(scope);
-    return { costUsd: cost, summary: after, recorded: true };
+      const event: SpendEvent = {
+        model: args.model,
+        inputTokens,
+        outputTokens,
+        costUsd: cost,
+        scope,
+        timestamp: Date.now(),
+      };
+      await this.storage.record(event);
+      this.onSpend?.(event);
+      const after = await this.storage.summary(scope);
+      return { costUsd: cost, summary: after, recorded: true };
+    });
   }
 
   /**
@@ -107,13 +112,19 @@ export class BudgetGuard {
     const result = await call();
     const usage = extract ? extract(result) : defaultExtract(result);
     if (usage) {
-      await this.check({
+      // Use recordOnly() — not check() — so a call that already ran and was
+      // billed is never rejected by a second budget evaluation (Fix: double-charge).
+      await this.recordOnly({
         model: args.model,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        scope: args.scope,
-        limits: args.limits,
+        scope: args.scope ?? DEFAULT_SCOPE,
       });
+    } else {
+      console.warn(
+        "[llm-hard-cap] Could not extract usage from LLM response; spend not recorded. " +
+          "Provide a custom `extract` function if you are using a non-standard response shape.",
+      );
     }
     return result;
   }
@@ -188,6 +199,55 @@ export class BudgetGuard {
       if (this.onExceeded === "block") allowed = false;
     }
     return { projectedUsd: cost, summary, allowed, error };
+  }
+
+  /**
+   * Serialise operations for a given scope using a promise chain so that
+   * concurrent check/record calls cannot interleave (Fix: TOCTOU race).
+   */
+  private withScopeLock<T>(scope: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this._pending.get(scope) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((res) => (release = res));
+    this._pending.set(scope, gate);
+    return prev
+      .then(() => fn())
+      .finally(() => {
+        release();
+        // Clean up the map entry once the lock is free and nobody else is queued.
+        if (this._pending.get(scope) === gate) this._pending.delete(scope);
+      });
+  }
+
+  /**
+   * Record actual spend for a completed LLM call WITHOUT re-evaluating budget limits.
+   * Used by `wrap()` so a call that has already been made and billed is never denied
+   * by a second budget check against potentially-stale estimates (Fix: double-charge).
+   */
+  private async recordOnly(args: {
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    scope: string;
+  }): Promise<void> {
+    const cost = calculateCost(args.model, args.inputTokens, args.outputTokens, this.pricing);
+    const event: SpendEvent = {
+      model: args.model,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      costUsd: cost,
+      scope: args.scope,
+      timestamp: Date.now(),
+    };
+    await this.withScopeLock(args.scope, async () => {
+      await this.storage.record(event);
+      try {
+        this.onSpend?.(event);
+      } catch (err) {
+        // Don't let a faulty onSpend callback propagate and corrupt the call result.
+        console.error("[llm-hard-cap] onSpend callback threw:", err);
+      }
+    });
   }
 }
 

@@ -199,6 +199,8 @@ const guard = new BudgetGuard({
 
 For distributed / multi-process setups, implement the `Storage` interface against Redis, Postgres, or your existing database:
 
+> ⚠️ `FileStorage` is designed for **single-process** use only. Two processes writing to the same file simultaneously will corrupt data. Use a database-backed `Storage` for any multi-process deployment.
+
 ```ts
 import type { Storage, SpendEvent, UsageSummary } from "llm-hard-cap";
 
@@ -256,11 +258,13 @@ No — it expects you to pass token counts (from the API response, or your own p
 
 ### What happens on rate limit / 5xx errors?
 
-The wrapped call propagates the error untouched. Nothing is recorded if the response doesn't include usage. This means failed calls don't count against your budget — exactly what you want.
+The wrapped call propagates the error untouched. Nothing is recorded if the response doesn't include usage (a `console.warn` is emitted so you know spend was not tracked). Failed calls don't count against your budget — exactly what you want.
 
 ### Is it safe for multi-process servers?
 
-The default `MemoryStorage` is per-process. Use `FileStorage` for single-host setups or implement `Storage` against Redis / Postgres for distributed apps.
+Concurrent requests within a **single process** are safe — `v0.2.1+` uses a per-scope async mutex to serialise every `check()` and `record()` operation, eliminating TOCTOU races.
+
+`FileStorage` is safe for single-process use only. For multi-process or distributed deployments, implement the `Storage` interface against Redis or Postgres.
 
 ---
 
@@ -316,6 +320,18 @@ See [`examples/`](./examples) for runnable scripts:
 
 Issues and PRs welcome. Pricing updates appreciated — providers change rates often.
 
-## License
+---
 
-MIT
+## Changelog
+
+### 0.2.1 — 2026-06-15
+
+**Bug fixes (3 critical)**
+
+- **TOCTOU race eliminated** — `BudgetGuard` now uses a per-scope async mutex to serialise every `summary → evaluate → record` cycle in `check()`. Concurrent requests for the same scope can no longer both slip through a limit by reading the same stale total.
+- **`wrap()` double-charge fixed** — after the real LLM call completes, spend is now recorded via a new internal `recordOnly()` path that does **not** re-evaluate budget limits. Previously, if actual tokens exceeded the pre-flight estimate, `check()` could throw a `BudgetExceededError` *after* the API had already been billed, leaving the caller with an error and no result.
+- **`FileStorage` atomic write** — the data file is now written to a `.tmp` sibling and then renamed, greatly reducing the risk of a torn write corrupting the JSON. A clear warning is also logged (instead of silently resetting) if the file cannot be parsed.
+
+### 0.2.0
+
+Initial public release.

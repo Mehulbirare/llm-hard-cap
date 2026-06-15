@@ -1,6 +1,6 @@
 {
   "name": "llm-hard-cap",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Hard spend caps for OpenAI, Anthropic Claude, Google Gemini, and any LLM API. Real-time token cost tracking and daily / monthly / per-user USD limits that stop runaway AI bills before they happen.",
   "keywords": [
     "llm",

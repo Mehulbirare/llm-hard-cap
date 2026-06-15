@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import type { SpendEvent, Storage, UsageSummary } from "./types.js";
 
@@ -54,8 +54,12 @@ export class MemoryStorage implements Storage {
 
 /**
  * Persists usage to a JSON file. Use this for CLI tools, scripts,
- * or single-process servers. For multi-process or distributed setups,
- * implement the `Storage` interface against Redis/Postgres.
+ * or single-process servers.
+ *
+ * ⚠️  **Not safe for concurrent multi-process use.** Two processes writing to the
+ * same file at the same time will produce corrupt JSON or silent over-spending.
+ * For multi-process or distributed setups, implement the `Storage` interface
+ * against a proper database (e.g. Redis or Postgres).
  */
 export class FileStorage implements Storage {
   private cache: Record<string, ScopeRecord> = {};
@@ -67,8 +71,16 @@ export class FileStorage implements Storage {
     if (this.loaded) return;
     if (existsSync(this.path)) {
       try {
-        this.cache = JSON.parse(readFileSync(this.path, "utf8"));
-      } catch {
+        const parsed = JSON.parse(readFileSync(this.path, "utf8"));
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          this.cache = parsed as Record<string, ScopeRecord>;
+        } else {
+          console.warn("[llm-hard-cap] FileStorage: data file had unexpected format; resetting.");
+          this.cache = {};
+        }
+      } catch (err) {
+        // This can happen when two processes write concurrently and corrupt the file.
+        console.warn("[llm-hard-cap] FileStorage: failed to parse data file; resetting.", err);
         this.cache = {};
       }
     }
@@ -78,7 +90,12 @@ export class FileStorage implements Storage {
   private flush(): void {
     const dir = dirname(this.path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(this.path, JSON.stringify(this.cache, null, 2), "utf8");
+    // Write to a temp file then rename. On POSIX this is atomic; on Windows it
+    // greatly reduces (but cannot fully eliminate) the torn-write window.
+    // For true multi-process safety, use a database-backed Storage implementation.
+    const tmp = `${this.path}.tmp`;
+    writeFileSync(tmp, JSON.stringify(this.cache, null, 2), "utf8");
+    renameSync(tmp, this.path);
   }
 
   record(event: SpendEvent): void {
